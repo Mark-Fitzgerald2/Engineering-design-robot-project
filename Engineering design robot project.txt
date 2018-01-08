@@ -1,0 +1,252 @@
+#include<Pololu3pi.h
+#include <PololuQTRSensors.h>
+#include <OrangutanMotors.h>
+#include <OrangutanAnalog.h>
+#include <OrangutanLEDs.h>
+#include <OrangutanLCD.h>
+#include <OrangutanBuzzer.h> //calls all the libraries necessary to complete all the tasks
+
+int Accel = A5;
+int LDR_Pin = A6; 
+int LDR_Pin2 = A7; //sets the values read from pins to a named variable
+
+int timer = 0; //used to check when the robot finishes the line
+int i = 0; //used for the line function
+int light1= 0;
+int light2 = 0;
+int light3 = 0; //sets up variables to count each light that is turned off
+int minvalueL = 0;
+int minvalueR = 0; //creates variables to read in the lowest value of light from the starting point
+
+OrangutanLCD lcd;
+OrangutanMotors motors;
+OrangutanBuzzer buzzer;
+OrangutanLEDs led;
+Pololu3pi robot; //creates a shortcut way of using commands from these libraries 
+unsigned int sensors[5]; //sets up an array for the IR sensors
+
+void setup()
+{
+   delay(500); //short delay before the robot begins
+   robot.init(2000,1); //the 1 here is used so the accelerometer pin isn't confused
+   with another pin from the line follower
+   int motorspeed = 60;
+   motors.setSpeeds ( -motorspeed, motorspeed);
+   delay(600); //gets the robot to do a 180 degree turn
+   motors.setSpeeds (0,0); //stops the robot moving
+   minvalueL = analogRead(LDR_Pin); //this is the lowest value read in by the
+   Left LDR and is recorded
+   minvalueR = analogRead(LDR_Pin2); //this is the lowest value read in by the
+   Right LDR and is recorded
+   /*on the day the robot ended up not turning the correct amount and so these
+   values were incorrect*/
+}
+
+ void loop() //starts a constant loop
+{
+  lightfollower(); //calls the light follower function
+}
+
+void lightfollower() //begins the light follower function 
+ {
+  clear(); //clears the LCD
+  int Left_LDR = analogRead(LDR_Pin);
+  int Right_LDR = analogRead(LDR_Pin2) ; //stores the values read in from the 
+  pins
+  lcd.gotoXY(0,0);
+  lcd.print(Left_LDR);
+  lcd.gotoXY(5,0); 
+  lcd.print(Right_LDR); //prints the values read from the LDR's to the LCD
+  int Diff = Right_LDR - Left_LDR; //calculates the difference between the LDR's
+  lcd.gotoXY(0,1);
+  lcd.print(Diff); //prints the difference to the LCD
+  delay(10); //a delay is used so that the values can be seen on the LCD
+  float pfiveper = (Left_LDR * 1.05); //creates a variable which is 5% higher than
+  the Left LDR value
+  float mfiveper = (Left_LDR * 0.95); //creates a variable which is 5% lower than
+  the Left LDR value
+  float Left1 = (minvalueL * 1.05);
+  float Left2 = (minvalueL * 0.95); //creates a five percent range of the Left LDR's
+  min value 
+  float Right1 = (minvalueR * 1.05);
+  float Right2 = (minvalueR * 0.95); //creates a five percent range of the Right
+  LDR's min value
+  if(Left2<Left_LDR<Left1 && Right2<Right_LDR<Right1) //checks if the LDR's
+  are within the five percent range of the min values
+  {
+    if(pfiveper>Right_LDR && mfiveper<Right_LDR) //checks if the Right LDR
+    value is within 5% of the Left value
+    {
+      int motorspeed= 100; 
+      motors.setSpeeds( motorspeed, motorspeed); //makes the robot drive
+      straight forward at speed 100
+      light1 = 1; //registers that it is following the first light
+      if (light2 == 1) //checks if the second light is on
+      {
+        light2 = 2; //registers it is following the second light
+      }
+   
+
+       if (light3 == 1) //checks if the third light is on
+      {
+        light3 = 2; //registers it is following the third light
+      }
+    }
+    else if(Right_LDR>pfiveper) //checks if the Right LDR is reading less light
+    than the Left LDR
+    {
+      int motorspeed= 100; 
+      motors.setSpeeds(motorspeed/2, motorspeed); //turns the robot back
+      towards the light
+    }  
+    else if(Right_LDR<mfiveper) //checks if the Right LDR is reading more light
+    than the Left LDR
+    {
+      int motorspeed= 100;
+      motors.setSpeeds(motorspeed, motorspeed/2); //turns the robot back
+      towards the light
+    }
+  }
+  else //used when the robot isn't facing the light
+  { 
+    int motorspeed = 30;
+    motors.setSpeeds( -motorspeed, motorspeed); //makes the robot spin
+    around
+    if (light1 == 1 && light2 == 0) //asks if followed the first light and the second is
+    off
+    {
+      light2 = 1; //registers the second light is now on
+      buzzer.playNote(NOTE_A(5), 250, 20); 
+      delay(1000); //makes a beep for one second
+    }
+    if (light2 == 2 && light3 == 0) //checks if it followed the second light and the
+    third light is off
+    {
+      light3 = 1; //registers the third light is now on
+      buzzer.playNote(NOTE_A(5), 250, 20);
+      delay(1000); //makes a beep for one second
+    }
+    if (light3 == 2) //checks if it followed the third light
+    {
+      buzzer.playNote(NOTE_A(5), 250, 20); //makes a beep
+      int motorspeed = 60;
+      motors.setSpeeds( -motorspeed, motorspeed);
+      delay(450); //turns the robot around to face the right direction for the line
+      motors.setSpeeds (40, 20);
+      delay(400); //turns the robot back onto the line
+      noTone(8); //stops the beep
+      linefollower(); //calls the line follower function
+    }
+   }
+ } //closes the light follower function
+ 
+ void linefollower() //begins the line follower function
+ {
+  int loopcounter; //creates a loopcounter for calibration
+  robot.init(2000); //used to read values 
+  delay(100); 
+  while ( i != 1 ) //checks the value of i
+  {
+  for (loopcounter=0; loopcounter<80; loopcounter++) //creates a loop that will
+  run 80 times
+  {
+    if (loopcounter < 20 || loopcounter >= 60) //sets extra conditions to allow the
+    robot to turn to read the line
+    {
+      motors.setSpeeds(50, -50); //makes the robot turn clockwise
+    } 
+    else
+    {
+      motors.setSpeeds(-50, 50); //makes the robot turn anticlockwise
+    }
+      robot.calibrateLineSensors(IR_EMITTERS_ON); //turns on IR emitters
+      delay(20); //calibrates the robot so it can detect where the line is
+    }
+    i++; //sets the value of i to one to exit calibration
+  }
+  motors.setSpeeds(0, 0); //makes the robot stop on the line
+
+  while ( timer < 1750) //checks a counter value for the line
+  {
+    int position = robot.readLine(sensors, IR_EMITTERS_ON); //reads the
+    position of the robot relative to the line
+    clear();
+    lcd.print(timer);
+    lcd.gotoXY(0, 1);
+    delay(10); //prints the timer value to screen
+    if (position < 1000) //checks if the robot has gone off to the right
+    {
+      motors.setSpeeds(0, 50); //turns it back onto the centre of the line
+      led.left(HIGH);
+      led.right(LOW);
+    }
+    else if (position < 3000) //checks if the robot is in the centre of the line
+    {
+      motors.setSpeeds(80, 80); //makes the robot drive forward
+      led.left(HIGH);
+      led.right(HIGH);
+    }
+    else //checks if the robot has veered to the left
+    {
+      motors.setSpeeds(50, 0); //turns it back onto the centre of the line
+      led.left(LOW);
+      led.right(HIGH);
+    }
+    timer++; //continuously increases the value of timer by one
+  }
+  buzzer.playNote(NOTE_A(5), 250, 20); //beeps to show end of line follower
+  while (timer==1750) //checks if the timer has reached 1850
+  {
+    noTone(8); //stops the beep
+    clear(); //clears the LCD
+    int Balance = analogRead(Accel); //assigns the value read from pin 5 to the
+    variable Balance
+    lcd.gotoXY(0,0);
+    lcd.print(Balance); //prints this value to the LCD
+    delay(200); //creates a delay to print the value
+    if (330<Balance<342) //checks if the robot is currently balanced
+    {
+      motors.setSpeeds(30,30); //if the robot is balanced it moves it forwards to
+      get to the seesaw
+      delay(1500);
+      motors.setSpeeds(0,0);
+    }
+    else 
+    {
+      seesaw(); //if it is unbalanced it calls the seesaw function
+    }
+  }
+ } //ends the line follower function
+ /*on the day the line follower code worked really well*/
+ 
+ void seesaw() //begins the seesaw function
+ {
+   int Balance = analogRead(Accel);
+   if (Balance > 342 ) //checks if the robot is pointing up the seesaw
+   {
+     int motorspeed= 40; 
+     motors.setSpeeds( motorspeed, motorspeed);
+     delay(150);
+     motors.setSpeeds(0,0);
+     delay(500); //slowly edges the robot up the seesaw
+   }
+   else if (Balance < 330) //enters if the robot is pointing down the seesaw
+   {
+     int motorspeed= 40; 
+     motors.setSpeeds( -motorspeed, -motorspeed);
+     delay(150);
+     motors.setSpeeds(0,0);
+     delay(500); //reverses the robot slowly back up the seesaw
+   }
+   else 
+   { 
+     int motorspeed= 0; 
+     motors.setSpeeds( motorspeed, motorspeed); //makes the robot stop if it is
+     in a balanced position
+     buzzer.playNote(NOTE_A(5), 250, 20); 
+     delay(5000); //gets the robot to beep for five seconds 
+   }
+ } //ends the seesaw function
+
+
+
